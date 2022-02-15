@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.ResourceLocations;
+using System.Linq;
 
 namespace Management
 {
@@ -19,6 +20,24 @@ namespace Management
 
         public static event Action OnAssetsLoaded;
         public static LoadStatus AssetsStatus { private get; set; } = LoadStatus.Unloaded;
+
+        private static List<Task> _loadHandles;
+
+        /// <summary>
+        /// Returns a tuple with the currently loaded assets and the total assets to load.
+        /// Returns (-1, -1) if assets are not currently loading.
+        /// </summary>
+        /// <returns></returns>
+        public static (int current, int total) GetLoadProgress()
+        {
+            if (_loadHandles == null)
+            {
+                return (-1, -1);
+            }
+
+            int current = _loadHandles.Count(h => h.IsCompleted);
+            return (current, _loadHandles.Count);
+        }
 
         private static void CheckLoadStatus()
         {
@@ -73,18 +92,18 @@ namespace Management
         /// <returns></returns>
         public static async Task LoadAssets()
         {
+            _loadHandles = new List<Task>();
             AssetsStatus = LoadStatus.Loading;
             var assetLocations = Addressables.LoadResourceLocationsAsync("default");
 
             await assetLocations.Task;
 
-            List<Task> handles = new List<Task>();
+            LoadAssetsFromLocations(ref _loadHandles, assetLocations.Result);
 
-            LoadAssetsFromLocations(ref handles, assetLocations.Result);
-
-            await Task.WhenAll(handles);
+            await Task.WhenAll(_loadHandles);
 
             AssetsStatus = LoadStatus.Loaded;
+            _loadHandles = null;
             OnAssetsLoaded?.Invoke();
         }
         
